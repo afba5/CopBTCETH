@@ -23,7 +23,7 @@ ctrl = list(RHO = 1,DELTA = 1e-8,MAJIT = 100,MINIT = 650,TOL = 1e-6)
 spec_BTC = ugarchspec(variance.model = list(model="eGARCH",garchOrder = c(3, 4)),mean.model = list(armaOrder = c(0,0),include.mean=TRUE),distribution.model = "sstd") 
 ## Fit marginal ARMA-GARCH model for BTC-EUR returns
 garch.fit_BTC = ugarchfit(data = R_BTCETH$`BTC-EUR`, spec = spec_BTC, solver = "solnp", solver.control = ctrl)
-
+## Extract standardized residuals
 residuals_BTC <- residuals(garch.fit_BTC,standardize=TRUE)
 
 # For ETH:
@@ -35,32 +35,32 @@ residuals_BTC <- residuals(garch.fit_BTC,standardize=TRUE)
 spec_ETH = ugarchspec(variance.model = list(model="eGARCH",garchOrder = c(4, 3)),mean.model = list(armaOrder = c(0,0),include.mean=FALSE),distribution.model = "sstd") 
 ## Fit marginal ARMA-GARCH model for ETH-EUR returns
 garch.fit_ETH = ugarchfit(data = R_BTCETH$`ETH-EUR`, spec = spec_ETH, solver = "solnp", solver.control = ctrl)
-
+## Extract standardized residuals
 residuals_ETH <- residuals(garch.fit_ETH,standardize=TRUE)
 
 # Put together stand. residuals from BTC and ETH ARMA-GARCH models
 residuals_BTCETH <- cbind(residuals_BTC,residuals_ETH)
 colnames(residuals_BTCETH) <- c("residuals_BTC","residuals_ETH")
-
-df_residuals_BTCETH <- fortify.zoo(residuals_BTCETH) # convert to data frame
+# Convert to data frame
+df_residuals_BTCETH <- fortify.zoo(residuals_BTCETH) 
 
 library(copula)
 
-# Eliminate first column (Date) and calculate the pseudo-observations from the residuals 
+# Transform standardized residuals into observations in the interval [0,1]
 U <- pobs(df_residuals_BTCETH[,-1]) 
 
 # Time-invariant Gumbel Survival Copula or rotated Gumbel Copula
 fitcop_gumbel_s <- fitCopula(rotCopula(gumbelCopula(dim = 2)), data = U, method = "mpl")
 
-# Time-varying Gumbel Survival Copula or rotated Gumbel Copula
+# Time-varying rotated Gumbel Copula (180 degrees) or Gumbel Survival
 
-## Create a function to calculate the copula-likelihood and the parameter
-
-### Function written by Andrew Patton (in MATLAB)
-### Sunday, 5 Aug, 2001.
-### https://public.econ.duke.edu/~ap172/code.html
-
+## Calculate the negative copula log-likelihood of Gumbel copula with time-varying parameter 
 gumbel_tvp1_CL <- function(theta, data, kappabar) {
+  
+  ### This function is a modified version in R from Andrew J. Patton's Matlab code
+  ### Date: Sunday, 5 Aug, 2001.
+  ### Source: https://public.econ.duke.edu/~ap172/code.html
+  
   T <- nrow(data)
   u <- data[, 1]
   v <- data[, 2]
@@ -105,17 +105,13 @@ gumbel_tvp1_CL_only <- function(theta, data, kappabar) {
 }
 
 ## Maximize the copula-likelihood function
-alpha1_tvgumbel_s <- coef(fitcop_gumbel_s) # use alpha from time-invariant rotated Gumbel as first value alpha_1
-lower <- -5 * rep(1, 3)
-upper <- 5 * rep(1, 3)
+alpha1_tvgumbel_s <- coef(fitcop_gumbel_s)
 theta0 <- c(sqrt(alpha1_tvgumbel_s-1), 0, 0)
 
 result_tvgumbel_s <- optim(
   par = theta0,
   fn = gumbel_tvp1_CL_only,
-  method = "L-BFGS-B",
-  lower = lower,
-  upper = upper,
+  control=list(trace=TRUE, maxit=1000),
   data = 1-U,  # we use 1-U since we look for the rotated copula
   kappabar = alpha1_tvgumbel_s
 )
@@ -123,10 +119,10 @@ result_tvgumbel_s <- optim(
 ## Extract the coefficients that maximize the copula-likelihood function  
 theta_tvgumbel_s <- result_tvgumbel_s$par
 
-## Estimate the copula parameter over time
+## Obtain the time-varying copula parameter
 alphat_tvgumbel_s <- gumbel_tvp1_CL(theta_tvgumbel_s, 1-U, alpha1_tvgumbel_s)[[2]]
 
-## Plot the copula parameter
+## Plot constant and time-varying copula parameter
 library(ggplot2)
 T_alphat_tvgumbel_s <- length(alphat_tvgumbel_s)
 data_tvgumbel_s <- data.frame(time = df_residuals_BTCETH[,1], 
@@ -135,8 +131,10 @@ data_tvgumbel_s <- data.frame(time = df_residuals_BTCETH[,1],
 ggplot(data_tvgumbel_s, aes(x = time)) +
   geom_line(aes(y = alphat_tvgumbel_s, color = "Time-varying")) +
   geom_line(aes(y = alpha1_tvgumbel_s, color = "Constant"), linetype = "dashed") +
-  labs(title = "") +
-  labs(x = "time", y = expression(hat(theta)), color = "") +
+  labs(x = "time", y = expression(theta), color = "") +
   theme_classic() +
   scale_color_manual(values = c("red","black")) +
-  theme(plot.title = element_text(hjust = 0.5))
+  theme(panel.border = element_rect(colour = "black", fill = NA),
+        legend.background = element_blank(),
+        legend.position = c(0.9,0.97))
+
