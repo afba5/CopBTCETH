@@ -55,8 +55,11 @@ U <- pobs(df_residuals_BTCETH[,-1])
 sym_jc_pdf <- function(u, v, tauU, tauL) {
   
   ### The following function is adapted in R from Andrew J. Patton's Matlab code
-  ### Date: Monday, 28 January, 2002
-  ### Source: https://public.econ.duke.edu/~ap172/code.html
+  ### URL: https://public.econ.duke.edu/~ap172/code.html
+  
+  ### Published in:
+  ### Patton, A.J., 2006, Modelling Asymmetric Exchange Rate Dependence,
+  ### International Economic Review, 47(2), 527-556.
   
   T <- max(c(length(u), length(v), length(tauU), length(tauL)))
   
@@ -97,8 +100,11 @@ sym_jc_pdf <- function(u, v, tauU, tauL) {
 bb7CL <- function(theta, data) {
   
   ### The following function is adapted in R from Andrew J. Patton's Matlab code
-  ### Date: Monday, 28 January, 2002
-  ### Source: https://public.econ.duke.edu/~ap172/code.html
+  ### URL: https://public.econ.duke.edu/~ap172/code.html
+  
+  ### Published in:
+  ### Patton, A.J., 2006, Modelling Asymmetric Exchange Rate Dependence,
+  ### International Economic Review, 47(2), 527-556.
   
   CL <- sym_jc_pdf(data[,1], data[,2], theta[1], theta[2])
   CL <- log(CL)
